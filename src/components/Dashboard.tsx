@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AdvancedControls } from "./AdvancedControls";
 import { AlertBanner } from "./AlertBanner";
@@ -42,10 +42,11 @@ export function Dashboard() {
   const [timelineStep, setTimelineStep] = useState<TimelineStep>(defaults.timelineStep);
   const [windDirection, setWindDirection] = useState(defaults.windDirection);
   const [rainfall, setRainfall] = useState(defaults.rainfall);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(env.liveDemo);
   const [selectedRouteId, setSelectedRouteId] = useState<string>("route-safest");
   const [routeGeometries, setRouteGeometries] = useState<RouteGeometry[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const mapSectionRef = useRef<HTMLDivElement>(null);
 
   const scenarioState: ScenarioState = useMemo(
     () => ({ disasterType, intensity, timelineStep, windDirection, rainfall }),
@@ -108,6 +109,18 @@ export function Dashboard() {
     const timer = setInterval(advanceTimeline, 2000);
     return () => clearInterval(timer);
   }, [isPlaying, advanceTimeline]);
+
+  // Keep map in view when user starts live playback
+  const handleTogglePlay = useCallback(() => {
+    setIsPlaying((playing) => {
+      if (!playing) {
+        requestAnimationFrame(() => {
+          mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
+      }
+      return !playing;
+    });
+  }, []);
 
   const routesWithGeometry = useMemo(() => {
     if (routeGeometries.length === 0) return result.evacuationRoutes;
@@ -192,13 +205,28 @@ export function Dashboard() {
               current={timelineStep}
               onSelect={setTimelineStep}
               isPlaying={isPlaying}
-              onTogglePlay={() => setIsPlaying((p) => !p)}
+              onTogglePlay={handleTogglePlay}
             />
 
-            <div className="overflow-hidden rounded-xl border border-slate-700/50 bg-slate-900/60 p-2 sm:p-4">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400 sm:mb-3">
-                Interactive Disaster Map
-              </h3>
+            <div
+              ref={mapSectionRef}
+              className={`overflow-hidden rounded-xl border bg-slate-900/60 p-2 transition-shadow sm:p-4 ${
+                isPlaying
+                  ? "border-red-500/40 shadow-lg shadow-red-950/30 ring-1 ring-red-500/20"
+                  : "border-slate-700/50"
+              }`}
+            >
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 sm:mb-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Interactive Disaster Map
+                </h3>
+                {isPlaying && (
+                  <span className="flex items-center gap-1.5 rounded-full bg-red-600/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-400">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
+                    Live
+                  </span>
+                )}
+              </div>
               <Simulation3D
                 disasterType={disasterType}
                 state={simState}

@@ -13,4 +13,6 @@ export const env = {
   alertPhonePublic: process.env.NEXT_PUBLIC_ALERT_PHONE ?? "",
   smsAlertsAuto: process.env.NEXT_PUBLIC_SMS_ALERTS_AUTO === "true",
   smsIntervalMs: parseInt(process.env.NEXT_PUBLIC_SMS_INTERVAL_MS ?? "30000", 10),
+  /** Auto-start timeline playback so the map runs live on load */
+  liveDemo: process.env.NEXT_PUBLIC_LIVE_DEMO !== "false",
 } as const;

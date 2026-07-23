@@ -22,7 +22,7 @@ export function TimelineView({ current, onSelect, isPlaying, onTogglePlay }: Tim
           onClick={onTogglePlay}
           className="shrink-0 flex items-center gap-1.5 rounded-lg bg-cyan-600/20 px-2.5 py-1.5 text-xs font-medium text-cyan-400 transition hover:bg-cyan-600/30 sm:px-3"
         >
-          {isPlaying ? "⏸ Pause" : "▶ Play"}
+          {isPlaying ? "⏸ Pause Live" : "▶ Go Live"}
         </button>
       </div>
 

@@ -11,7 +11,7 @@ import {
   buildPopulationFeatures,
   FLOOD_VIEW_CENTER,
 } from "@/lib/geo/simulation-3d";
-import { DAVAO_CENTER, toLngLat } from "@/lib/geo/coordinates";
+import { DAVAO_CENTER, CALAMITY_EPICENTERS, toLngLat } from "@/lib/geo/coordinates";
 import { davaoCity } from "@/lib/digital-twin/davao-city";
 import { env } from "@/lib/env";
 import type { DisasterType, SimulationState } from "@/lib/types";
@@ -160,11 +160,15 @@ export function Simulation3D({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const isPlayingRef = useRef(isPlaying);
   const animRef = useRef<number>(0);
+  const [mapReady, setMapReady] = useState(false);
   const [animPhase, setAnimPhase] = useState(0);
   const [collapseProgress, setCollapseProgress] = useState(0);
   const [floodDepth, setFloodDepth] = useState(0);
   const [floodView, setFloodView] = useState(disasterType === "flood");
+
+  isPlayingRef.current = isPlaying;
 
   useEffect(() => {
     let start: number | null = null;
@@ -192,6 +196,20 @@ export function Simulation3D({
     setFloodView(false);
   }, []);
 
+  const flyToCalamityView = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const epicenter = CALAMITY_EPICENTERS[disasterType];
+    map.flyTo({
+      center: [epicenter.lng, epicenter.lat],
+      zoom: disasterType === "flood" ? 12.4 : 12.8,
+      pitch: 62,
+      bearing: 28,
+      duration: 1800,
+    });
+    setFloodView(disasterType === "flood");
+  }, [disasterType]);
+
   const flyToFloodView = useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -208,10 +226,18 @@ export function Simulation3D({
   useEffect(() => {
     if (disasterType === "flood") {
       setFloodView(true);
-      const map = mapRef.current;
-      if (map?.isStyleLoaded()) flyToFloodView();
     }
-  }, [disasterType, flyToFloodView]);
+    const map = mapRef.current;
+    if (map?.isStyleLoaded()) flyToCalamityView();
+  }, [disasterType, flyToCalamityView]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    map.resize();
+    requestAnimationFrame(() => map.resize());
+    if (isPlaying) flyToCalamityView();
+  }, [isPlaying, mapReady, flyToCalamityView]);
 
   useEffect(() => {
     if (!containerRef.current || !env.mapboxToken) return;
@@ -235,6 +261,17 @@ export function Simulation3D({
     map.on("load", () => {
       hideMapLabels(map);
       map.resize();
+      setMapReady(true);
+
+      if (isPlayingRef.current) {
+        const epicenter = CALAMITY_EPICENTERS[disasterType];
+        map.jumpTo({
+          center: [epicenter.lng, epicenter.lat],
+          zoom: disasterType === "flood" ? 12.4 : 12.8,
+          pitch: 62,
+          bearing: 28,
+        });
+      }
 
       // 3D terrain
       map.addSource("mapbox-dem", {
@@ -622,14 +659,29 @@ export function Simulation3D({
 
   if (!env.mapboxToken) {
     return (
-      <div className="flex h-[min(50vh,420px)] items-center justify-center rounded-xl border border-slate-700/50 bg-slate-900 sm:h-[580px]">
-        <p className="px-4 text-center text-sm text-slate-400">Mapbox token required for 3D simulation</p>
+      <div className="flex h-[min(50vh,420px)] flex-col items-center justify-center gap-3 rounded-xl border border-slate-700/50 bg-slate-900 px-4 sm:h-[580px]">
+        <p className="text-center text-sm font-medium text-slate-300">Map unavailable</p>
+        <p className="max-w-sm text-center text-xs text-slate-500">
+          Set <code className="text-cyan-400">NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN</code> in{" "}
+          <code className="text-slate-400">.env.local</code> (local) or Vercel Environment
+          Variables (live) to enable the disaster map.
+        </p>
       </div>
     );
   }
 
+  const mapHeightClass = isPlaying
+    ? "h-[min(58vh,480px)] sm:h-[min(62vh,560px)] md:h-[min(75vh,680px)]"
+    : "h-[min(50vh,420px)] sm:h-[min(55vh,520px)] md:h-[min(70vh,620px)]";
+
   return (
-    <div className="relative w-full min-w-0 overflow-hidden rounded-lg border border-blue-500/30 bg-slate-900 shadow-lg shadow-blue-950/30 sm:rounded-xl">
+    <div
+      className={`relative w-full min-w-0 overflow-hidden rounded-lg border bg-slate-900 shadow-lg sm:rounded-xl ${
+        isPlaying
+          ? "border-red-500/40 shadow-red-950/20"
+          : "border-blue-500/30 shadow-blue-950/30"
+      }`}
+    >
       <div className="absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-col gap-1.5 sm:left-3 sm:top-3 sm:max-w-none sm:gap-2">
         <div className="flex flex-wrap items-center gap-1 sm:gap-2">
           <span className="rounded bg-blue-600/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white sm:px-2 sm:text-[10px]">
@@ -679,7 +731,16 @@ export function Simulation3D({
         floodDepth={floodDepth}
       />
 
-      <div ref={containerRef} className="h-[min(50vh,420px)] w-full min-w-0 bg-slate-800 sm:h-[min(55vh,520px)] md:h-[min(70vh,620px)]" />
+      {!mapReady && (
+        <div className="absolute inset-0 z-[5] flex items-center justify-center bg-slate-900/90">
+          <div className="flex flex-col items-center gap-2">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
+            <span className="text-xs text-slate-400">Loading live map…</span>
+          </div>
+        </div>
+      )}
+
+      <div ref={containerRef} className={`${mapHeightClass} w-full min-w-0 bg-slate-800 transition-[height] duration-500`} />
     </div>
   );
 }
